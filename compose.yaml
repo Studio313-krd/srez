@@ -1,0 +1,75 @@
+name: srez
+x-app: &app
+  image: ${APP_IMAGE:-srez:local}
+  environment:
+    SREZ_DEBUG: ${SREZ_DEBUG:-false}
+    SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS}
+    CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+    PUBLIC_URL: ${PUBLIC_URL:-}
+    POSTGRES_HOST: db
+    POSTGRES_DB: ${POSTGRES_DB:-srez}
+    POSTGRES_USER: ${POSTGRES_USER:-srez}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    MAX_ENABLED: ${MAX_ENABLED:-false}
+    MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+    MAX_CHAT_ID: ${MAX_CHAT_ID:-}
+    MAX_API_URL: ${MAX_API_URL:-https://platform-api2.max.ru}
+    MAX_CA_BUNDLE: ${MAX_CA_BUNDLE:-}
+  restart: unless-stopped
+  networks: [internal]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-srez}
+      POSTGRES_USER: ${POSTGRES_USER:-srez}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  migrate:
+    <<: *app
+    restart: 'no'
+    command: [python, manage.py, migrate, --noinput]
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    <<: *app
+    build: .
+    ports: ['127.0.0.1:${APP_PORT:-8087}:8000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, 'import os,urllib.request; urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8000/api/health/",headers={"Host":os.environ.get("ALLOWED_HOSTS","localhost").split(",")[0],"X-Forwarded-Proto":"https"}),timeout=5)']
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 15s
+  worker:
+    <<: *app
+    command: [python, manage.py, run_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, manage.py, worker_health]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+volumes:
+  postgres_data:
+networks:
+  internal:

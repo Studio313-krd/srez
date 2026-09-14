@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Варианты интерфейса — Срез</title>
+    <style>
+      @font-face {
+        font-family: Golos;
+        src: url("/fonts/golos-text-cyrillic.woff2");
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #e9edf3;
+        color: #203049;
+        font-family: Golos, "Segoe UI", sans-serif;
+      }
+      .board {
+        width: 1800px;
+        height: 1400px;
+        padding: 40px 44px 28px;
+        overflow: hidden;
+      }
+      .board-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 23px;
+      }
+      .board-title {
+        display: flex;
+        align-items: baseline;
+        gap: 21px;
+      }
+      .index {
+        font-size: 16px;
+        color: #718094;
+      }
+      .board-title h1 {
+        font-size: 29px;
+        letter-spacing: -1px;
+        margin: 0;
+        font-weight: 600;
+      }
+      .board-title p {
+        font-size: 13px;
+        color: #718094;
+        margin: 0;
+      }
+      .brand {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 3px;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 1286px 388px;
+        gap: 30px;
+        align-items: start;
+      }
+      .column-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        letter-spacing: 1.1px;
+        color: #627188;
+        margin-bottom: 12px;
+      }
+      .column-label > span {
+        font-size: 10px;
+        letter-spacing: 0;
+        color: #8b96a6;
+      }
+      .desktop {
+        width: 1286px;
+        height: 1192px;
+        border-radius: 11px;
+        border: 1px solid #cad3df;
+        background: #fff;
+        box-shadow: 0 15px 36px #12234312;
+        overflow: hidden;
+      }
+      .browser-bar {
+        height: 31px;
+        background: #f7f9fb;
+        border-bottom: 1px solid #e3e8ef;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 13px;
+      }
+      .browser-bar > i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #cad2de;
+      }
+      .browser-bar > span {
+        display: block;
+        font-size: 9px;
+        color: #8491a3;
+        text-align: center;
+        width: 100%;
+        margin-right: 45px;
+      }
+      .desktop iframe {
+        border: 0;
+        width: 1440px;
+        height: 1300px;
+        transform: scale(0.892);
+        transform-origin: top left;
+        display: block;
+      }
+      .phone {
+        height: 1084px;
+        width: 388px;
+        border: 6px solid #263546;
+        border-radius: 27px;
+        overflow: hidden;
+        box-shadow: 0 15px 36px #12234316;
+        background: #fff;
+      }
+      .phone iframe {
+        border: 0;
+        width: 390px;
+        height: 1110px;
+        transform: scale(0.965);
+        transform-origin: top left;
+        display: block;
+      }
+      .board-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        color: #718094;
+        font-size: 11px;
+      }
+      .board-foot b {
+        color: #41516a;
+        font-weight: 500;
+      }
+      .dark {
+        background: #202d3a;
+        color: #e6edf4;
+      }
+      .dark .board-title p,
+      .dark .index,
+      .dark .board-foot,
+      .dark .column-label {
+        color: #acbdce;
+      }
+      .dark .board-foot b {
+        color: #cbd8e4;
+      }
+      .dark .column-label > span {
+        color: #8fa3b7;
+      }
+      .dark .desktop {
+        border-color: #4b5e70;
+      }
+      .dark .phone {
+        border-color: #506275;
+      }
+      .dark .browser-bar {
+        background: #283747;
+        border-color: #3c4e60;
+      }
+      .dark .browser-bar i {
+        background: #55697c;
+      }
+      .dark .browser-bar span {
+        color: #a4b6c7;
+      }
+      .wine {
+        background: #eee9ed;
+        color: #382b37;
+      }
+      .wine .board-title p,
+      .wine .index,
+      .wine .board-foot,
+      .wine .column-label {
+        color: #8a7684;
+      }
+      .wine .board-foot b {
+        color: #725564;
+      }
+      .wine .desktop {
+        border-color: #d7cbd2;
+      }
+      .wine .phone {
+        border-color: #51404b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <header class="board-header">
+        <div class="board-title">
+          <span class="index"></span>
+          <h1></h1>
+          <p></p>
+        </div>
+        <span class="brand">СРЕЗ / КОНТРОЛЬ РОЗНИЦЫ</span>
+      </header>
+      <div class="columns">
+        <div>
+          <div class="column-label">
+            КАБИНЕТ ВИДЕОКОНТРОЛЯ<span>Компьютер · общий обзор</span>
+          </div>
+          <div class="desktop">
+            <div class="browser-bar">
+              <i></i><i></i><i></i
+              ><span>Срез · внутренняя система отчётности</span>
+            </div>
+            <iframe title="Кабинет видеоконтроля" id="office"></iframe>
+          </div>
+        </div>
+        <div>
+          <div class="column-label">СОТРУДНИК МАГАЗИНА<span>Телефон</span></div>
+          <div class="phone">
+            <iframe title="Форма отчёта магазина" id="store"></iframe>
+          </div>
+        </div>
+      </div>
+      <footer class="board-foot">
+        <span><b>Три числа. Три среза. Вся смена под контролем.</b></span
+        ><span
+          >Интерактивный макет · демонстрационные данные · сентябрь 2026</span
+        >
+      </footer>
+    </div>
+    <script>
+      const v = new URLSearchParams(location.search).get("v") || "a";
+      const data = {
+        a: ["01", "Рабочий стол", "Общая таблица и быстрый контроль"],
+        b: ["02", "Фокус", "Сначала замечания, затем детали"],
+        c: ["03", "Диспетчерская", "Состояние сети и события смены"],
+      }[v];
+      document.querySelector(".index").textContent = data[0];
+      document.querySelector("h1").textContent = data[1];
+      document.querySelector(".board-title p").textContent = data[2];
+      document.body.className = v === "c" ? "dark" : v === "b" ? "wine" : "";
+      document.querySelector("#office").src =
+        "/?v=" + v + "&role=office&capture=1";
+      document.querySelector("#store").src =
+        "/?v=" + v + "&role=store&capture=1";
+    </script>
+  </body>
+</html>
