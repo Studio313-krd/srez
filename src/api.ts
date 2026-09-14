@@ -94,7 +94,8 @@ export async function downloadTable(data: {columns: string[]; rows: (string | nu
     throw new Error(result.error || "Не удалось выгрузить таблицу. Повторите попытку.");
   }
   const url = URL.createObjectURL(await response.blob());
-  const link = document.createElement("a"); link.href=url; link.download=`srez-${data.context || "table"}.${data.format}`; link.click();
+  const name = (data.context || "table").replace(/[<>:"/\\|?*]/g, "-");
+  const link = document.createElement("a"); link.href=url; link.download=`srez-${name}.${data.format}`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 export class ApiError extends Error {

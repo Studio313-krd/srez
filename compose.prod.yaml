@@ -8,7 +8,7 @@ x-app: &app
     ALLOWED_HOSTS: srez.studio313.ru
     CSRF_TRUSTED_ORIGINS: https://srez.studio313.ru
     PUBLIC_URL: https://srez.studio313.ru
-    TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32,172.18.0.2/32,172.21.0.2/32,192.168.0.6/32,172.23.0.6/32,185.72.147.187/32}
+    TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?Set the observed reverse proxy address}
     POSTGRES_HOST: db
     POSTGRES_DB: srez
     POSTGRES_USER: srez

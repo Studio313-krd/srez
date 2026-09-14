@@ -748,7 +748,7 @@ function OfficeDashboard({
             ))}
           </div>
           <div className="w-table-scroll">
-            <DataTable key={stage} label="Отчёты магазинов" context={`${data.date}-${stage}`}>
+            <DataTable key={stage} label="Отчёты магазинов" context={`${data.date} · ${stageName(stage)}`}>
               <thead>
                 <tr>
                   <th>Магазин</th>

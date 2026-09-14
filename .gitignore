@@ -17,6 +17,7 @@ tmp/
 output/playwright/
 output/xlsx/
 design/screenshots/
+design/screenshots.zip
 SOURCE-AUDIT.md
 IMPORT-RESULTS.md
 IMPLEMENTATION-PLAN.md
