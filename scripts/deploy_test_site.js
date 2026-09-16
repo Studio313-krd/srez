@@ -6,7 +6,7 @@ async (page) => page.evaluate(async()=>{
   const production=stacks.find(s=>s.Name==='srez'&&s.EndpointId===3);
   if(!production)throw new Error('Expected server environment not found');
   const containers=await fetch('/api/endpoints/3/docker/containers/json?all=true').then(r=>r.json());
-  if(containers.some(c=>c.Ports?.some(p=>p.PublicPort===9995)))throw new Error('Port 9995 is occupied');
+  if(containers.some(c=>c.Ports?.some(p=>p.PublicPort===9992)))throw new Error('Port 9992 is occupied');
   const detail=await fetch('/api/stacks/'+production.Id).then(r=>r.json());
   const token=detail.Env.find(e=>e.name==='TELEGRAM_BOT_TOKEN')?.value||'';
   const random=length=>Array.from(crypto.getRandomValues(new Uint8Array(length))).map(v=>v.toString(16).padStart(2,'0')).join('');
@@ -18,5 +18,5 @@ async (page) => page.evaluate(async()=>{
       RepositoryURL:'https://github.com/Studio313-krd/srez.git',RepositoryReferenceName:'refs/heads/test',ComposeFile:'compose.test.yaml',Env})});
   if(!response.ok)throw new Error('Test deployment failed: HTTP '+response.status);
   const result=await response.json();
-  return {id:result.Id,name:result.Name,port:9995,branch:'test',telegramEnabled:false};
+  return {id:result.Id,name:result.Name,port:9992,branch:'test',telegramEnabled:false};
 })

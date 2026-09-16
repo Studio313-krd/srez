@@ -53,7 +53,7 @@ services:
     build: .
     pull_policy: build
     mem_limit: 384m
-    ports: ['9995:8000']
+    ports: ['9992:8000']
     depends_on:
       migrate: {condition: service_completed_successfully}
     healthcheck:
