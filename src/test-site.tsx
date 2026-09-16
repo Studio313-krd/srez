@@ -22,7 +22,7 @@ export default function TestSiteControls() {
   }
   const points=run?.reports.filter(r=>r.store__code==='TEST-MS')||[];
   return <section className="t-controls" aria-label="Тестовый прогон">
-    <div className="t-controls-head"><div><h2>Первый тест за 9 минут</h2><p>Вы — продавец двух магазинов. Видеоконтроль проверяет отчёты под аккаунтом администратора.</p></div>
+    <div className="t-controls-head"><div><h2>Первый тест за 9 минут</h2><p>Продавец заполняет отчёты двух учебных магазинов. Видеоконтроль проверяет их под аккаунтом администратора.</p></div>
       <button className="primary-button" disabled={busy||!run} onClick={()=>run?.started?setConfirm(true):start()}>{busy?'Подготавливаем…':run?.started?'Начать заново':'Начать тест сейчас'}</button></div>
     <p>Сначала проверьте сотрудников и планы во вкладках ниже. Затем запускайте прогон, когда оба участника вошли на сайт.</p>
     {!!points.length && <ol className="t-checkpoints">{points.map(p=><li key={p.checkpoint}><b>{labels[p.checkpoint]}</b><span>Откроется в {time(p.available_at)}</span><span>Сдать до {time(p.deadline)} МСК</span></li>)}</ol>}

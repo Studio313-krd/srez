@@ -20,11 +20,11 @@ class BotSetupTests(SimpleTestCase):
     def test_telegram_reads_chat_ids_without_acknowledging_or_printing_messages(self, request):
         request.return_value.__enter__.return_value = BytesIO(json.dumps({'ok':True, 'result':[
             {'message':{'chat':{'id':-123, 'title':'Office'}, 'text':'private message'}},
-            {'my_chat_member':{'chat':{'id':-123, 'title':'Office'}}}
+            {'my_chat_member':{'chat':{'id':-456, 'title':'Group without commands'}}}
         ]}).encode())
         output = StringIO()
         call_command('bot_chat_id', 'telegram', stdout=output)
-        self.assertEqual(output.getvalue(), '-123\tOffice\n')
+        self.assertEqual(output.getvalue(), '-123\tOffice\n-456\tGroup without commands\n')
         query = request.call_args.args[0]
         self.assertEqual(query.get_method(), 'GET')
         self.assertNotIn('offset', query.full_url)
