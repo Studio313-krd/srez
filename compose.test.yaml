@@ -1,0 +1,81 @@
+name: srez-test
+x-app: &app
+  image: srez:test
+  pull_policy: never
+  environment:
+    SREZ_DEBUG: 'false'
+    SREZ_TEST_MODE: 'true'
+    SECRET_KEY: ${SECRET_KEY:?Set a separate test secret}
+    ALLOWED_HOSTS: srez-test.studio313.ru
+    CSRF_TRUSTED_ORIGINS: https://srez-test.studio313.ru
+    PUBLIC_URL: https://srez-test.studio313.ru
+    TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}
+    POSTGRES_HOST: db
+    POSTGRES_DB: srez_test
+    POSTGRES_USER: srez_test
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a separate test database password}
+    TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    MAX_ENABLED: 'false'
+  restart: unless-stopped
+  networks: [internal]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  logging: {driver: json-file, options: {max-size: '10m', max-file: '3'}}
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: srez_test
+      POSTGRES_USER: srez_test
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a separate test database password}
+    volumes: [test_postgres_data:/var/lib/postgresql/data]
+    networks: [internal]
+    restart: unless-stopped
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U srez_test -d srez_test']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: {driver: json-file, options: {max-size: '10m', max-file: '3'}}
+  migrate:
+    <<: *app
+    restart: 'no'
+    mem_limit: 256m
+    command: [python, manage.py, migrate, --noinput]
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    <<: *app
+    build: .
+    pull_policy: build
+    mem_limit: 384m
+    ports: ['9995:8000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8000/api/health/",headers={"Host":"srez-test.studio313.ru","X-Forwarded-Proto":"https"}),timeout=5)']
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 20s
+  worker:
+    <<: *app
+    mem_limit: 192m
+    command: [python, manage.py, run_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, manage.py, worker_health]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+volumes:
+  test_postgres_data:
+networks:
+  internal:

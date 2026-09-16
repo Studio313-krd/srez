@@ -92,6 +92,8 @@ def deliver_notifications():
             link = f'{settings.PUBLIC_URL.rstrip("/")}/?date={report.date}&report={report.pk}'
             text = (f'{report.store.code} · {report.store.name}\n{report.date:%d.%m.%Y} · {report.get_checkpoint_display()}\n'
                     f'{message}\n{link}')[:3900]
+            if settings.SREZ_TEST_MODE:
+                text = '[ТЕСТ СРЕЗА]\n' + text
             gate.next_send_at = now + timedelta(seconds=3.1 if channel == 'telegram' else 0.6)
             retry_after = 0
             try:

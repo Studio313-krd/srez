@@ -19,6 +19,7 @@ import {
 import { api } from "./api";
 import "./management.css";
 import DataTable from "./data-table";
+import TestSiteControls from "./test-site";
 
 type Profile = {
   legal_entity?: string;
@@ -213,9 +214,11 @@ function EditButton({
 export default function Management({
   date,
   refresh,
+  testMode = false,
 }: {
   date: string;
   refresh: number;
+  testMode?: boolean;
 }) {
   const [tab, setTab] = useState(
     new URLSearchParams(location.search).get("tab") || "stores",
@@ -304,6 +307,7 @@ export default function Management({
   });
   return (
     <section className="m-page" aria-label="Управление сетью">
+      {testMode && <TestSiteControls />}
       {error && (
         <div className="w-notice w-error" role="alert">
           {error}
@@ -870,7 +874,7 @@ export default function Management({
               <div className="m-section-heading">
                 <div>
                   <h2>Доступы магазинов</h2>
-                  <p>Каждый логин открывает только назначенный магазин. Первоначальные пароли передаются офису отдельно; сотрудникам выдаётся только доступ их магазина.</p>
+                  <p>Каждый логин открывает только назначенные магазины. Первоначальные пароли передаются офису отдельно; сотрудникам выдаётся только доступ их магазина.</p>
                 </div>
               </div>
               <div className="m-table-wrap">

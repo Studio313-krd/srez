@@ -4,6 +4,7 @@ import json
 from datetime import date, timedelta
 from functools import wraps
 from django.contrib.auth import authenticate, login, logout
+from django.conf import settings
 from django.db import connection, transaction, IntegrityError
 from django.http import JsonResponse, HttpResponse
 from django.middleware.csrf import get_token
@@ -57,7 +58,7 @@ def user_json(user):
 @endpoint(authenticated=False)
 def session(request):
     return JsonResponse({'user': user_json(request.user) if request.user.is_authenticated else None,
-                         'csrf': get_token(request), 'today': timezone.localdate().isoformat()})
+                         'csrf': get_token(request), 'today': timezone.localdate().isoformat(), 'test_mode': settings.SREZ_TEST_MODE})
 
 
 @endpoint(('POST',), authenticated=False)

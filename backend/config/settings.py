@@ -68,3 +68,10 @@ MAX_API_URL = os.getenv('MAX_API_URL', 'https://platform-api2.max.ru')
 # Optional server-mounted CA bundle for MAX. TLS verification remains enabled.
 MAX_CA_BUNDLE = os.getenv('MAX_CA_BUNDLE', '')
 PUBLIC_URL = os.getenv('PUBLIC_URL', '')
+SREZ_TEST_MODE = os.getenv('SREZ_TEST_MODE', 'false').lower() == 'true'
+if SREZ_TEST_MODE and not DEBUG and DATABASES['default']['NAME'] != 'srez_test':
+    raise ImproperlyConfigured('Test mode requires a separate srez_test database.')
+# Cookies are host-only; distinct names also isolate sites accessed on different ports.
+if SREZ_TEST_MODE:
+    SESSION_COOKIE_NAME = 'srez_test_session'
+    CSRF_COOKIE_NAME = 'srez_test_csrf'

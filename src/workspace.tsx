@@ -233,13 +233,14 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
 export default function Workspace() {
   const [user, setUser] = useState<User | null>(null);
+  const [testMode, setTestMode] = useState(false);
   const [starting, setStarting] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
     let live = true;
-    api<{ user: User | null }>("session/")
+    api<{ user: User | null; test_mode?: boolean }>("session/")
       .then((result) => {
-        if (live) setUser(result.user);
+        if (live) {setUser(result.user);setTestMode(!!result.test_mode);}
       })
       .catch((e) => {
         if (live) setError(errorText(e));
@@ -255,7 +256,8 @@ export default function Workspace() {
     };
   }, []);
   return (
-    <div className="app variant-a w-app">
+    <div className={"app variant-a w-app" + (testMode ? " w-test-site" : "")}>
+      {testMode && <div className="w-test-banner" role="note"><b>Тестовая версия Среза</b><span>Два учебных магазина · данные для проверки</span></div>}
       {starting ? (
         <main className="w-loading">
           <Brand />
@@ -272,7 +274,7 @@ export default function Workspace() {
           </button>
         </main>
       ) : user ? (
-        <Desk key={user.id} user={user} onLogout={() => setUser(null)} />
+        <Desk key={user.id} user={user} testMode={testMode} onLogout={() => setUser(null)} />
       ) : (
         <Login onLogin={setUser} />
       )}
@@ -280,7 +282,7 @@ export default function Workspace() {
   );
 }
 
-function Desk({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Desk({ user, onLogout, testMode }: { user: User; onLogout: () => void; testMode: boolean }) {
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("srez-sidebar-collapsed") === "true"; } catch { return false; } });
   function toggleSidebar() { setCollapsed(value => { try { localStorage.setItem("srez-sidebar-collapsed", String(!value)); } catch {} return !value; }); }
   const query = new URLSearchParams(location.search);
@@ -463,7 +465,7 @@ function Desk({ user, onLogout }: { user: User; onLogout: () => void }) {
           </Notice>
         )}
         {management ? (
-          <Management date={date} refresh={refresh} />
+          <Management date={date} refresh={refresh} testMode={testMode} />
         ) : !data ? (
           <div className="w-empty">
             {busy
@@ -1166,6 +1168,13 @@ function ReportForm({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [availabilityTick, setAvailabilityTick] = useState(0);
+  useEffect(() => {
+    const delay = Date.parse(report.available_at || "") - Date.now();
+    if (!Number.isFinite(delay) || delay <= 0) return;
+    const timer = window.setTimeout(() => setAvailabilityTick(value => value + 1), Math.min(delay + 50, 2147483647));
+    return () => window.clearTimeout(timer);
+  }, [report.available_at, availabilityTick]);
   const request = useRef({ signature: "", id: "" });
   const previous = store.reports
     .filter(

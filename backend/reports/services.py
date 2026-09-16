@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 from zoneinfo import ZoneInfo
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -59,6 +60,9 @@ def schedule(store, day):
 
 
 def ensure_reports(store, day):
+    if settings.SREZ_TEST_MODE and store.profile.get('sandbox_store'):
+        # Acceptance reports are created explicitly by the short-run controller.
+        return
     if store.archived or not store.monitoring_enabled:
         return
     monitoring_from = store.profile.get('monitoring_from')
