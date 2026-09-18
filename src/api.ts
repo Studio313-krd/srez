@@ -1,4 +1,5 @@
 export type User = {
+  employee_name?: string;
   id: number;
   name: string;
   username: string;
@@ -26,7 +27,7 @@ export type Finding = {
   message: string;
   state: string;
   version: number;
-  actions: { author: string; action: string; comment: string; at: string }[];
+  actions: { author: string; author_role?: string; action: string; comment: string; at: string }[];
 };
 export type Report = {
   id: number;
@@ -135,7 +136,7 @@ export async function api<T>(
   }
   const result = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && path !== "login/")
+    if (response.status === 401 && path !== "login/" && path !== "employee-link/login/")
       window.dispatchEvent(new Event("session-expired"));
     throw new ApiError(
       result.error || "Не удалось выполнить действие.",

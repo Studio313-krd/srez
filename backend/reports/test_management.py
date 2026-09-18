@@ -58,6 +58,21 @@ class ManagementTests(TestCase):
         self.assertEqual(self.post(f'stores/{self.store.pk}/', {'name':'Denied'}).status_code, 403)
         self.assertEqual(Client().get('/api/manage/').status_code, 401)
 
+    def test_create_store_without_local_preview_allows_first_day_reports(self):
+        day = timezone.localdate()
+        with override_settings(DEBUG=False, SREZ_LOCAL_PREVIEW=False):
+            response = self.post('stores/0/', {'code':'NEW-ONLINE', 'name':'Новый магазин',
+                'city':'Москва', 'network':'MM', 'timezone':'Europe/Moscow',
+                'active_from':str(day), 'opens_at':'10:00', 'closes_at':'22:00',
+                'weekdays':list(range(7)), 'monitoring_enabled':True, 'staff':[]})
+        self.assertEqual(response.status_code, 200, response.content)
+        store = Store.objects.get(pk=response.json()['id'])
+        reports = Report.objects.filter(store=store, date=day)
+        self.assertEqual(set(reports.values_list('checkpoint', flat=True)), {'13','17','close'})
+        self.assertFalse(reports.filter(deadline__isnull=False).exists())
+        self.assertEqual(store.profile['monitoring_from'], str(day+timedelta(days=1)))
+        self.assertFalse(store.access_set.exists())
+
     def test_manual_report_creation_and_admin_submission(self):
         response = self.post('reports/', {'store_id': self.store.pk, 'date': str(self.day), 'checkpoint': '13'})
         self.assertEqual(response.status_code, 200, response.content)

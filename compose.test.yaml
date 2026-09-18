@@ -50,7 +50,10 @@ services:
       db: {condition: service_healthy}
   web:
     <<: *app
-    build: .
+    build:
+      context: .
+      args:
+        VITE_SIMPLE_WORKSPACE: 'true'
     pull_policy: build
     mem_limit: 384m
     ports: ['9992:8000']

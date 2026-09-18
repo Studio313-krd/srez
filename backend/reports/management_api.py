@@ -1,5 +1,6 @@
 import hashlib
-from datetime import date, time, timedelta
+import secrets
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.password_validation import validate_password
@@ -10,8 +11,9 @@ from django.http import JsonResponse
 from django.utils import timezone
 from .models import (Store, Employee, StoreStaff, LegalEntity, Plan, SourceDocument, SourceSheet,
                      ImportIssue, ManagementEvent, Access, Report, ScheduleException)
-from .services import DomainError, role, ensure_reports, business_date, report_json, CHECKPOINTS
+from .services import DomainError, role, ensure_reports, business_date, report_json, CHECKPOINTS, schedule
 from .views import endpoint, body
+from .employee_links import access_data, disable_employee_login
 
 
 def require_admin(request):
@@ -40,18 +42,25 @@ def store_data(store):
         'closes_at': store.closes_at.isoformat(timespec='minutes'), 'weekdays': store.weekdays,
         'active_from': store.active_from, 'active_until': store.active_until, 'monitoring_enabled': store.monitoring_enabled,
         'archived': store.archived, 'profile': store.profile,
-        'staff': [{'id': s.employee_id, 'name': s.employee.name, 'slot': s.slot} for s in store.staff.all()]}
+        'staff': [{'id': s.employee_id, 'name': s.employee.name, 'slot': s.slot,
+                   'archived': s.employee.archived} for s in store.staff.all()]}
 
 
 @endpoint()
 def overview(request):
     require_admin(request)
     from .worker import notification_status
-    return JsonResponse({'stores': [store_data(s) for s in Store.objects.filter(archived=False).prefetch_related('staff__employee')],
+    include_archived = request.GET.get('include_archived') == '1'
+    stores = Store.objects.all() if include_archived else Store.objects.filter(archived=False)
+    employees = Employee.objects.all() if include_archived else Employee.objects.filter(archived=False)
+    return JsonResponse({'stores': [store_data(s) for s in stores.prefetch_related('staff__employee').order_by('code')],
         'notifications': notification_status(),
-        'employees': [{'id': p.pk, 'name': p.name, 'position': p.position, 'active': p.active, 'notes': p.notes,
-            'sources': p.source_data.get('sources', []), 'stores': [{'code': a.store.code, 'name': a.store.name, 'slot': a.slot} for a in p.assignments.all() if not a.store.archived]}
-            for p in Employee.objects.prefetch_related('assignments__store').order_by('name')],
+        'employees': [{'id': p.pk, 'name': p.name, 'position': p.position, 'active': p.active,
+            'archived': p.archived, 'notes': p.notes,
+            'access': access_data(p),
+            'sources': p.source_data.get('sources', []), 'stores': [{'code': a.store.code, 'name': a.store.name,
+                'slot': a.slot, 'archived': a.store.archived} for a in p.assignments.all() if include_archived or not a.store.archived]}
+            for p in employees.select_related('user__access').prefetch_related('assignments__store', 'user__access__stores').order_by('name')],
         'legal_entities': list(LegalEntity.objects.order_by('name').values('id', 'name', 'data')),
         'sources': [{'id': d.pk, 'title': d.title, 'url': d.url, 'imported_at': d.imported_at, 'stats': d.stats,
             'sheets': list(d.sheets.order_by('title').values('id', 'title'))} for d in SourceDocument.objects.all()],
@@ -69,6 +78,7 @@ def save_store(request, pk):
     require_admin(request)
     store = Store.objects.select_for_update().filter(pk=pk).first() if pk else Store()
     if store is None: raise DomainError('Магазин не найден.', 404)
+    if store.archived: raise DomainError('Сначала восстановите магазин из удалённых.', 409)
     before = store_data(store) if pk else {}
     data = body(request)
     was_monitoring = store.monitoring_enabled if pk else False
@@ -100,8 +110,8 @@ def save_store(request, pk):
             if not isinstance(item, dict) or item.get('slot') not in ['seller1','seller2','curator']: raise DomainError('Неизвестная должность.')
             employee = Employee.objects.filter(pk=item.get('id')).first()
             if not employee: raise DomainError('Сотрудник не найден.')
-            if not employee.active and not StoreStaff.objects.filter(store=store, employee=employee, slot=item['slot']).exists():
-                raise DomainError('Неактивного сотрудника нельзя назначить в магазин.')
+            if (employee.archived or not employee.active) and not StoreStaff.objects.filter(store=store, employee=employee, slot=item['slot']).exists():
+                raise DomainError('Удалённого или неактивного сотрудника нельзя назначить в магазин.')
             if item['slot'] in desired: raise DomainError('Место сотрудника указано дважды.')
             desired[item['slot']] = employee
         store.staff.exclude(slot__in=desired).delete()
@@ -109,6 +119,16 @@ def save_store(request, pk):
             StoreStaff.objects.update_or_create(store=store, slot=slot, defaults={'employee': employee})
     after = store_data(store)
     record_event(request, 'Изменение магазина' if pk else 'Добавление магазина', store.code, before, after)
+    if not pk:
+        # A newly connected store can report on its first day without receiving
+        # retroactive lateness; the normal schedule starts on the next day.
+        day = date.fromisoformat(store.active_from) if isinstance(store.active_from, str) else store.active_from
+        bounds = schedule(store, day)
+        if bounds and day <= business_date(store):
+            start, end = bounds
+            for checkpoint in CHECKPOINTS:
+                if checkpoint == 'close' or start <= datetime.combine(day, time(int(checkpoint)), start.tzinfo) < end:
+                    Report.objects.get_or_create(store=store, date=day, checkpoint=checkpoint)
     return JsonResponse(after)
 
 
@@ -118,6 +138,7 @@ def save_employee(request, pk):
     require_admin(request)
     person = Employee.objects.select_for_update().filter(pk=pk).first() if pk else Employee()
     if person is None: raise DomainError('Сотрудник не найден.', 404)
+    if person.archived: raise DomainError('Сначала восстановите сотрудника из удалённых.', 409)
     before = model_to_dict(person) if pk else {}
     data = body(request)
     for field in ['name','position','active','notes']:
@@ -126,8 +147,96 @@ def save_employee(request, pk):
     person.name = ' '.join(person.name.split())
     person.key = hashlib.sha256(person.name.casefold().replace('ё','е').encode()).hexdigest()
     validate(person); person.save()
+    if person.user_id and not person.active:
+        disable_employee_login(person)
     record_event(request, 'Изменение сотрудника' if pk else 'Добавление сотрудника', person.name, before, model_to_dict(person))
     return JsonResponse({'ok': True, 'id': person.pk})
+
+
+@endpoint(('POST',))
+@transaction.atomic
+def archive_store(request, pk):
+    require_admin(request)
+    archived = body(request).get('archived')
+    if type(archived) is not bool: raise DomainError('Укажите, удалить или восстановить магазин.')
+    store = Store.objects.select_for_update().filter(pk=pk).first()
+    if store is None: raise DomainError('Магазин не найден.', 404)
+    if store.archived != archived:
+        before = store_data(store)
+        store.archived = archived
+        if not archived and store.monitoring_enabled:
+            # Do not create overdue reports for the period spent in the archive.
+            start = business_date(store) + timedelta(days=1)
+            store.profile['monitoring_from'] = start.isoformat()
+            store.expected_through = start - timedelta(days=1)
+        store.save(update_fields=['archived', 'profile', 'expected_through'])
+        record_event(request, 'Удаление магазина' if archived else 'Восстановление магазина',
+                     store.code, before, store_data(store))
+    return JsonResponse(store_data(store))
+
+
+@endpoint(('POST',))
+@transaction.atomic
+def archive_employee(request, pk):
+    require_admin(request)
+    archived = body(request).get('archived')
+    if type(archived) is not bool: raise DomainError('Укажите, удалить или восстановить сотрудника.')
+    person = Employee.objects.select_for_update().filter(pk=pk).first()
+    if person is None: raise DomainError('Сотрудник не найден.', 404)
+    if person.archived != archived:
+        before = model_to_dict(person)
+        person.archived = archived
+        person.save(update_fields=['archived'])
+        if archived and person.user_id:
+            disable_employee_login(person)
+        record_event(request, 'Удаление сотрудника' if archived else 'Восстановление сотрудника',
+                     person.name, before, model_to_dict(person))
+    return JsonResponse({'ok': True, 'id': person.pk, 'archived': person.archived})
+
+
+@endpoint(('GET', 'POST'))
+@transaction.atomic
+def employee_access(request, pk):
+    require_admin(request)
+    person = Employee.objects.select_for_update().filter(pk=pk).first()
+    if person is None: raise DomainError('Сотрудник не найден.', 404)
+    if person.user_id and (role(person.user) != 'store' or person.user.is_staff or person.user.is_superuser):
+        raise DomainError('Здесь можно управлять только доступом продавца.', 403)
+    if request.method == 'GET':
+        return JsonResponse(access_data(person, include_link=True) or {'enabled': False, 'has_link': False, 'store_ids': [], 'link_path': ''})
+    data = body(request)
+    enabled = data.get('enabled', True)
+    rotate = data.get('rotate_link', False)
+    if type(enabled) is not bool: raise DomainError('Проверьте настройку доступа.')
+    if type(rotate) is not bool: raise DomainError('Проверьте действие со ссылкой.')
+    if enabled and (person.archived or not person.active):
+        raise DomainError('Доступ можно выдать только работающему сотруднику. Сначала восстановите его, если он удалён.')
+    user = get_user_model().objects.select_for_update().get(pk=person.user_id) if person.user_id else get_user_model()()
+    if user.pk and (role(user) != 'store' or user.is_staff or user.is_superuser):
+        raise DomainError('Здесь можно управлять только доступом продавца.', 403)
+    store_ids = data.get('store_ids', [])
+    if not isinstance(store_ids, list) or any(type(s) is not int for s in store_ids): raise DomainError('Выберите магазины.')
+    stores = Store.objects.filter(pk__in=set(store_ids), archived=False)
+    if stores.count() != len(set(store_ids)): raise DomainError('Выберите действующие магазины.')
+    if enabled and not store_ids: raise DomainError('Выберите хотя бы один магазин для доступа.')
+    before = access_data(person) or {}
+    new_link = rotate or not person.login_version
+    if not user.pk:
+        user.username = 'employee.' + secrets.token_hex(16)
+    user.is_active = enabled
+    user.first_name, user.last_name = person.name[:150], person.name[150:]
+    if new_link or not enabled or user.has_usable_password():
+        user.set_unusable_password()
+    validate(user); user.save()
+    access, _ = Access.objects.get_or_create(user=user, defaults={'role': 'store'})
+    access.stores.set(stores)
+    person.user = user
+    if new_link:
+        person.login_version = secrets.token_urlsafe(32)
+    person.save(update_fields=['user', 'login_version'])
+    record_event(request, 'Доступ сотрудника', person.name, before,
+                 {**access_data(person), 'link_replaced': new_link})
+    return JsonResponse(access_data(person, include_link=True))
 
 
 @endpoint(('POST',))

@@ -88,7 +88,7 @@ def deliver_notifications():
             if not item:
                 continue
             finding, report = item.finding, item.finding.report
-            message = ('Ответ магазина: ' + item.action.comment) if item.action_id else finding.message
+            message = (('Вопрос магазина: ' if item.action.action == 'question' else 'Ответ магазина: ') + item.action.comment) if item.action_id else finding.message
             link = f'{settings.PUBLIC_URL.rstrip("/")}/?date={report.date}&report={report.pk}'
             text = (f'{report.store.code} · {report.store.name}\n{report.date:%d.%m.%Y} · {report.get_checkpoint_display()}\n'
                     f'{message}\n{link}')[:3900]

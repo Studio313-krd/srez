@@ -3,15 +3,18 @@ import hashlib
 import json
 from datetime import date, timedelta
 from functools import wraps
+from secrets import compare_digest as secrets_compare
 from django.contrib.auth import authenticate, login, logout
 from django.conf import settings
+from django.core.signing import BadSignature
 from django.db import connection, transaction, IntegrityError
 from django.http import JsonResponse, HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.cache import never_cache
-from .models import Report, Plan, Finding, FindingAction, LoginAttempt, WorkerHealth
+from .models import Report, Plan, Finding, FindingAction, LoginAttempt, WorkerHealth, Employee
+from .employee_links import signer
 from .services import (DomainError, allowed_stores, role, business_date, ensure_reports, report_json,
     revision_json, submit, checkpoint_status, CHECKPOINTS, make_finding, queue_notification)
 
@@ -50,7 +53,9 @@ def csrf_failure(request, reason=''):
 
 
 def user_json(user):
+    person = getattr(user, 'employee_profile', None)
     return {'id': user.pk, 'name': user.get_full_name() or user.username, 'username': user.username,
+            'employee_name': person.name if person and not person.archived else '',
             'role': role(user), 'admin': user.is_staff}
 
 
@@ -58,7 +63,8 @@ def user_json(user):
 @endpoint(authenticated=False)
 def session(request):
     return JsonResponse({'user': user_json(request.user) if request.user.is_authenticated else None,
-                         'csrf': get_token(request), 'today': timezone.localdate().isoformat(), 'test_mode': settings.SREZ_TEST_MODE})
+                         'csrf': get_token(request), 'today': timezone.localdate().isoformat(), 'test_mode': settings.SREZ_TEST_MODE,
+                         'local_preview': settings.DEBUG and getattr(settings, 'SREZ_LOCAL_PREVIEW', False)})
 
 
 @endpoint(('POST',), authenticated=False)
@@ -87,6 +93,41 @@ def sign_in(request):
     if not user:
         raise DomainError('Неверный логин или пароль.', 401)
     login(request, user)
+    return JsonResponse({'user': user_json(user), 'csrf': get_token(request)})
+
+
+@endpoint(('POST',), authenticated=False)
+def employee_link_login(request):
+    token = body(request).get('token', '')
+    if not isinstance(token, str) or not token or len(token) > 2048:
+        raise DomainError('Ссылка недействительна. Попросите видеоконтроль прислать новую.', 401)
+    user = None
+    key = hashlib.sha256(('employee-link-ip:' + request.META.get('REMOTE_ADDR', '')).encode()).hexdigest()
+    now = timezone.now()
+    with transaction.atomic():
+        LoginAttempt.objects.get_or_create(key=key, defaults={'window_start': now})
+        attempt = LoginAttempt.objects.select_for_update().get(key=key)
+        if now - attempt.window_start > timedelta(minutes=15):
+            attempt.failures, attempt.window_start = 0, now
+        if attempt.failures >= 20:
+            raise DomainError('Слишком много попыток входа. Повторите через 15 минут.', 429)
+        try:
+            payload = signer().unsign_object(token)
+            if not isinstance(payload, dict) or type(payload.get('id')) is not int or not isinstance(payload.get('version'), str):
+                raise ValueError()
+            person = Employee.objects.select_for_update().filter(pk=payload['id'], active=True, archived=False).first()
+            if person and person.login_version and secrets_compare(person.login_version, payload['version']) and person.user_id:
+                candidate = person.user
+                if candidate.is_active and not candidate.is_staff and not candidate.is_superuser and role(candidate) == 'store':
+                    user = candidate
+        except (BadSignature, ValueError, TypeError, UnicodeDecodeError):
+            pass
+        attempt.failures = 0 if user else attempt.failures + 1
+        attempt.save()
+        if user:
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+    if not user:
+        raise DomainError('Ссылка недействительна или вход закрыт. Обратитесь к видеоконтролю.', 401)
     return JsonResponse({'user': user_json(user), 'csrf': get_token(request)})
 
 
@@ -127,7 +168,8 @@ def dashboard_data(request):
         plan = plan_map.get(store.pk)
         result.append({'id': store.pk, 'code': store.code, 'name': store.name, 'city': store.city,
             'network': store.network, 'timezone': store.timezone, 'profile': store.profile, 'monitoring_enabled': store.monitoring_enabled,
-            'employees': [{'employee_id': a.employee_id, 'employee__name': a.employee.name, 'slot': a.slot} for a in store.staff.all()],
+            'employees': [{'employee_id': a.employee_id, 'employee__name': a.employee.name, 'slot': a.slot}
+                          for a in store.staff.all() if not a.employee.archived],
             'business_date': business_date(store).isoformat(),
             'checkpoint_status': {s: checkpoint_status(store, day, s) for s in CHECKPOINTS if not any(r['checkpoint'] == s for r in grouped.get(store.pk, []))},
             'reports': sorted(grouped.get(store.pk, []), key=lambda r: ['13','17','close'].index(r['checkpoint'])),
@@ -183,18 +225,22 @@ def finding_action(request, pk):
 @endpoint(('POST',))
 @transaction.atomic
 def report_question(request, pk):
-    if role(request.user) not in ['office', 'manager']:
-        raise DomainError('Задавать вопросы может только офис.', 403)
+    if role(request.user) not in ['store', 'office', 'manager']:
+        raise DomainError('Нет доступа к обсуждению.', 403)
     report = Report.objects.select_for_update().filter(pk=pk, store__in=allowed_stores(request.user)).first()
     if not report:
         raise DomainError('Отчёт не найден.', 404)
     comment = body(request).get('comment')
     if not isinstance(comment, str) or not comment.strip() or len(comment) > 2000:
-        raise DomainError('Напишите вопрос магазину, не более 2000 символов.')
-    finding = make_finding(report, report.current_version, 'manual_question', 'Вопрос от видеоконтроля', notify=False)
+        raise DomainError('Напишите сообщение, не более 2000 символов.')
+    seller = role(request.user) == 'store'
+    finding = make_finding(report, report.current_version, 'manual_question',
+                           'Вопрос от продавца' if seller else 'Вопрос от видеоконтроля', notify=False)
     finding.state = 'requested'
     finding.save(update_fields=['state'])
-    FindingAction.objects.create(finding=finding, author=request.user, action='requested', comment=comment.strip())
+    action = FindingAction.objects.create(finding=finding, author=request.user,
+                                          action='question' if seller else 'requested', comment=comment.strip())
+    if seller: queue_notification(finding, action)
     return JsonResponse({'ok': True})
 
 

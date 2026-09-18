@@ -116,13 +116,17 @@ class ReviewTests(TestCase):
         submit(self.seller, report.pk, {'version':1,'request_id':str(uuid4()),'revenue':'10','receipts':1,'units':2,'comment':'Уточнили по кассе'})
         finding.refresh_from_db(); self.assertEqual(finding.state, 'requested')
 
-    def test_store_cannot_create_office_question_or_reply_to_other_store(self):
+    def test_store_can_ask_own_question_but_cannot_access_other_store(self):
         report = Report.objects.create(store=self.store, date=self.day, checkpoint='13')
         self.client.force_login(self.seller)
-        self.assertEqual(self.client.post(f'/api/reports/{report.pk}/question/', {'comment':'x'}, content_type='application/json').status_code, 403)
+        self.assertEqual(self.client.post(f'/api/reports/{report.pk}/question/', {'comment':'Помогите с отчётом'}, content_type='application/json').status_code, 200)
+        own_question = Finding.objects.get(report=report, kind='manual_question')
+        self.assertEqual(own_question.actions.get().action, 'question')
+        self.assertEqual(Notification.objects.filter(finding=own_question).count(), 2)
         self.assertEqual(self.client.get('/api/manage/').status_code, 403)
         other = Store.objects.create(code='R2', name='Other', city='City', network='MM', active_from=self.day)
         foreign = Report.objects.create(store=other, date=self.day, checkpoint='13')
+        self.assertEqual(self.client.post(f'/api/reports/{foreign.pk}/question/', {'comment':'x'}, content_type='application/json').status_code, 404)
         finding = make_finding(foreign, 0, 'missing', 'Missing')
         self.assertEqual(self.client.post(f'/api/findings/{finding.pk}/action/', {'action':'reply','comment':'x'}, content_type='application/json').status_code, 404)
 

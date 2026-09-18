@@ -23,8 +23,9 @@ const sortable = (value: string | number | null) => {
   return /^-?\d+(\.\d+)?$/.test(cleaned) ? Number(cleaned) : value;
 };
 
-export default function DataTable({ children, className = "", label, pageSize = 100, context = "" }: {
+export default function DataTable({ children, className = "", label, pageSize = 100, context = "", query = "", onClearQuery }: {
   children: ReactNode; className?: string; label: string; pageSize?: number; context?: string;
+  query?: string; onClearQuery?: () => void;
 }) {
   const [filters, setFilters] = useState<Record<number, string>>({});
   const [sort, setSort] = useState<{column: number; direction: 1 | -1} | null>(null);
@@ -48,7 +49,13 @@ export default function DataTable({ children, className = "", label, pageSize = 
   }), [body]);
   const titles = headers.map(h => textOf(h.props.children));
   const usable = titles.map(t => !!t && t !== "Действия");
-  const matched = rows.filter(r => Object.entries(filters).every(([column, query]) => normalize(r.search[Number(column)]).includes(normalize(query))));
+  const terms = normalize(query).split(" ").filter(Boolean);
+  const matched = rows.filter(r => {
+    const allFields = normalize(r.search.filter((_, i) => usable[i]).join(" "));
+    return terms.every(term => allFields.includes(term)) &&
+      Object.entries(filters).every(([column, value]) => normalize(r.search[Number(column)]).includes(normalize(value)));
+  });
+  useEffect(() => { setPage(0); }, [query]);
   if (sort) matched.sort((a, b) => {
     const x = sortable(a.values[sort.column]), y = sortable(b.values[sort.column]);
     if (x === null || y === null) return x === y ? a.index - b.index : x === null ? 1 : -1;
@@ -84,7 +91,7 @@ export default function DataTable({ children, className = "", label, pageSize = 
   return <div className="st-block" data-table={label}>
     <div className="st-toolbar">
       <span aria-live="polite">Найдено {matched.length} из {rows.length}</span>
-      {(activeFilters.length > 0 || sort) && <button type="button" onClick={() => {setFilters({}); setSort(null); setPage(0);}}>Сбросить всё <X size={16}/></button>}
+      {(activeFilters.length > 0 || sort || (terms.length > 0 && onClearQuery)) && <button type="button" onClick={() => {setFilters({}); setSort(null); setPage(0); onClearQuery?.();}}>Сбросить всё <X size={16}/></button>}
       <button type="button" className="st-export" onClick={() => {setError(""); setExportOpen(true);}}><ArrowDownToLine size={17}/>Экспорт</button>
     </div>
     {(activeFilters.length > 0 || sort) && <div className="st-applied">

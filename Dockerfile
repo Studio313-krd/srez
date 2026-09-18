@@ -1,5 +1,7 @@
 FROM node:24-alpine AS frontend
 WORKDIR /build
+ARG VITE_SIMPLE_WORKSPACE=false
+ENV VITE_SIMPLE_WORKSPACE=${VITE_SIMPLE_WORKSPACE}
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json index.html vite.config.ts ./

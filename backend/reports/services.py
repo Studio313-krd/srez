@@ -243,5 +243,5 @@ def report_json(report):
         'version': report.current_version, 'status': status, 'late': late,
         'current': revision_json(current) if current else None,
         'findings': [{'id': f.pk, 'kind': f.kind, 'message': f.message, 'state': f.state, 'version': f.version,
-            'actions': [{'author': a.author.get_full_name() or a.author.username, 'action': a.action,
+            'actions': [{'author': a.author.get_full_name() or a.author.username, 'author_role': role(a.author), 'action': a.action,
                          'comment': a.comment, 'at': a.created_at.isoformat()} for a in f.actions.all()]} for f in findings]}

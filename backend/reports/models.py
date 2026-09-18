@@ -87,7 +87,7 @@ class Plan(models.Model):
     units = models.PositiveIntegerField('План алкогольных единиц', null=True, blank=True)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, editable=False)
     approved_at = models.DateTimeField(auto_now_add=True)
-    reason = models.CharField('Основание / причина изменения', max_length=300)
+    reason = models.CharField('Основание / причина изменения', max_length=300, blank=True)
     origin = models.CharField(max_length=16, default='manual')
     units_per_receipt = models.DecimalField(max_digits=10, decimal_places=4, null=True, blank=True)
     source_data = models.JSONField(default=dict, blank=True)
@@ -187,10 +187,13 @@ class LoginAttempt(models.Model):
 
 
 class Employee(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name='employee_profile')
+    login_version = models.CharField(max_length=64, blank=True, default='', editable=False)
     name = models.CharField(max_length=200)
     key = models.CharField(max_length=64, unique=True)
     position = models.CharField(max_length=100, default='Продавец')
     active = models.BooleanField(default=True)
+    archived = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
     source_data = models.JSONField(default=dict, blank=True)
 
