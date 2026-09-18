@@ -17,4 +17,4 @@ async page => page.evaluate(async () => {
   if (!result.ok) throw new Error('Test stack update failed: HTTP '+result.status);
   const updated = await result.json();
   return {id:updated.Id,name:updated.Name,branch:'test',port:9992,environmentPreserved:true};
-});
+})
